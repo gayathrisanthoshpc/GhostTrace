@@ -1,0 +1,108 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <title>GhostTrace Test Lab</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 50px;
+      background: #f1f5f9;
+      color: #172033;
+    }
+
+    .card {
+      max-width: 600px;
+      padding: 30px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 5px 20px #0001;
+    }
+
+    button {
+      padding: 12px 20px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+
+    .overlay-test {
+      position: fixed;
+      top: 200px;
+      left: 50px;
+      width: 300px;
+      height: 100px;
+      opacity: 0.02;
+      z-index: 9999;
+    }
+
+    .tiny-test {
+      width: 4px;
+      height: 4px;
+      padding: 0;
+      border: 0;
+    }
+
+    .normal-link {
+      display: inline-block;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>GhostTrace Test Lab</h1>
+
+    <p>
+      This page contains harmless, controlled
+      examples for testing GhostTrace.
+    </p>
+
+    <h3>Test 1: Normal button</h3>
+
+    <button onclick="alert('Normal button clicked')">
+      Normal button
+    </button>
+
+    <h3>Test 2: Nearly invisible button</h3>
+
+    <button
+      style="opacity: 0.02"
+      onclick="alert('Invisible test clicked')"
+    >
+      Invisible test button
+    </button>
+
+    <h3>Test 3: Tiny interactive element</h3>
+
+    <button
+      class="tiny-test"
+      aria-label="Tiny test button"
+      onclick="alert('Tiny test clicked')"
+    ></button>
+
+    <h3>Test 4: Transparent overlay</h3>
+
+    <p>
+      A transparent test element has been positioned
+      over part of this page.
+    </p>
+
+    <a
+      href="#"
+      class="overlay-test"
+      aria-label="Transparent overlay test"
+      onclick="event.preventDefault()"
+    ></a>
+
+    <a href="#"
+       class="normal-link"
+       onclick="event.preventDefault()">
+      Normal test link
+    </a>
+  </div>
+</body>
+</html>

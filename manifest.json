@@ -1,0 +1,27 @@
+
+{
+  "manifest_version": 3,
+  "name": "GhostTrace",
+  "version": "0.1.0",
+  "description": "Inspect suspicious hidden interactions on webpages.",
+  "permissions": [
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Scan with GhostTrace"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

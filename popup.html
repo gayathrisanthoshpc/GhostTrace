@@ -1,0 +1,64 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>GhostTrace</title>
+
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">G</div>
+
+      <div>
+        <h1>GhostTrace</h1>
+        <p>Browser behavior scanner</p>
+      </div>
+    </div>
+
+    <span class="status">LOCAL</span>
+  </header>
+
+  <main>
+    <div class="intro">
+      <h2>What's hiding on this page?</h2>
+
+      <p>
+        Inspect suspicious interactive elements
+        on the current website.
+      </p>
+    </div>
+
+    <button id="scanBtn">
+      Scan current page
+    </button>
+
+    <div id="result" class="result">
+      <div class="empty-icon">⌕</div>
+
+      <p>
+        Your scan results will appear here.
+      </p>
+    </div>
+
+    <button id="clearBtn" class="secondary">
+      Clear highlights
+    </button>
+  </main>
+
+  <footer>
+    GhostTrace 0.1.0 · Analysis runs locally
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
