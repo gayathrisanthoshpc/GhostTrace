@@ -3,8 +3,15 @@ const scanBtn = document.getElementById("scanBtn");
 const clearBtn = document.getElementById("clearBtn");
 const result = document.getElementById("result");
 
+const filterSection = document.getElementById("filterSection");
+const filterButtons = document.querySelectorAll(".filter-btn");
+
 const HISTORY_KEY = "ghostTraceScanHistory";
 const MAX_HISTORY = 5;
+
+// Store the current scan and selected filter.
+let currentFindings = [];
+let currentFilter = "All";
 
 // Get the currently active Chrome tab.
 async function getCurrentTab() {
@@ -255,6 +262,7 @@ function renderHistory() {
     clearHistoryBtn.textContent = "Clear";
 
     Object.assign(clearHistoryBtn.style, {
+      width: "auto",
       border: "none",
       background: "#fee2e2",
       color: "#b91c1c",
@@ -351,7 +359,6 @@ function renderHistory() {
 // EXPLAINABLE FINDINGS
 // ------------------------------
 
-// Create a reusable explanation section.
 function createExplanationSection(title, text, color) {
   const section = document.createElement("div");
 
@@ -401,7 +408,6 @@ function createFindingCard(finding, index) {
     background: "#ffffff"
   });
 
-  // Finding title.
   const title = document.createElement("strong");
 
   title.textContent =
@@ -415,28 +421,23 @@ function createFindingCard(finding, index) {
     overflowWrap: "anywhere"
   });
 
-  // Risk badge.
   const riskLevel = finding.riskLevel || "Unknown";
   const riskScore = finding.riskScore ?? 0;
 
   const riskBadge = document.createElement("span");
+  riskBadge.className = "risk-badge";
 
   riskBadge.textContent =
     `${riskLevel} Risk · ${riskScore}/100`;
 
-  Object.assign(riskBadge.style, {
-    display: "inline-block",
-    marginTop: "8px",
-    marginBottom: "8px",
-    padding: "4px 8px",
-    borderRadius: "12px",
-    backgroundColor: getRiskColor(riskLevel),
-    color: "#ffffff",
-    fontSize: "12px",
-    fontWeight: "bold"
-  });
+  if (riskLevel === "High") {
+    riskBadge.classList.add("risk-high");
+  } else if (riskLevel === "Medium") {
+    riskBadge.classList.add("risk-medium");
+  } else if (riskLevel === "Low") {
+    riskBadge.classList.add("risk-low");
+  }
 
-  // Detection reasons.
   const reasons = document.createElement("div");
 
   const reasonsHeading = document.createElement("strong");
@@ -467,14 +468,12 @@ function createFindingCard(finding, index) {
 
   reasons.append(reasonsHeading, reasonsList);
 
-  // Plain-language explanation.
   const explanationSection = createExplanationSection(
     "What it means",
     finding.explanation,
     "#2563eb"
   );
 
-  // Practical review recommendation.
   const recommendationSection = createExplanationSection(
     "What to check",
     finding.recommendation,
@@ -493,14 +492,134 @@ function createFindingCard(finding, index) {
 }
 
 // ------------------------------
+// SEVERITY FILTERING
+// ------------------------------
+
+// Update the selected filter button.
+function updateFilterButtons() {
+  filterButtons.forEach(button => {
+    const isActive = button.dataset.filter === currentFilter;
+
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+// Display findings matching the selected risk level.
+function renderFilteredFindings() {
+  // Remove the old finding cards but preserve the summary and history.
+  const oldCards = result.querySelectorAll(".finding");
+  oldCards.forEach(card => card.remove());
+
+  const filteredFindings = currentFilter === "All"
+    ? currentFindings
+    : currentFindings.filter(
+        finding => finding.riskLevel === currentFilter
+      );
+
+  // Show how many findings match the current filter.
+  const countMessage = document.createElement("p");
+
+  countMessage.className = "filter-count";
+
+  countMessage.textContent =
+    `Showing ${filteredFindings.length} of ${currentFindings.length} finding(s)`;
+
+  Object.assign(countMessage.style, {
+    margin: "0 0 10px",
+    fontSize: "12px",
+    color: "#aab5cc"
+  });
+
+  // Remove any previous count message.
+  const oldCount = result.querySelector(".filter-count");
+  if (oldCount) {
+    oldCount.remove();
+  }
+
+  // Insert the count before the finding cards.
+  const historySection = result.querySelector(
+    ":scope > div:last-child"
+  );
+
+  // Find a stable insertion point after the summary.
+  const summary = result.querySelector(
+    ":scope > div"
+  );
+
+  if (summary) {
+    result.insertBefore(countMessage, summary.nextSibling);
+  } else {
+    result.prepend(countMessage);
+  }
+
+  if (filteredFindings.length === 0) {
+    const emptyMessage = document.createElement("p");
+
+    emptyMessage.className = "filter-empty";
+
+    emptyMessage.textContent = currentFilter === "All"
+      ? "No findings to display."
+      : `No ${currentFilter.toLowerCase()}-risk findings were detected.`;
+
+    Object.assign(emptyMessage.style, {
+      padding: "12px",
+      background: "#141b2e",
+      borderRadius: "8px",
+      fontSize: "12px",
+      lineHeight: "1.5",
+      color: "#aab5cc"
+    });
+
+    result.insertBefore(
+      emptyMessage,
+      countMessage.nextSibling
+    );
+  } else {
+    filteredFindings.forEach((finding, index) => {
+      const card = createFindingCard(finding, index);
+
+      result.insertBefore(
+        card,
+        countMessage.nextSibling
+      );
+
+      // Keep cards in the correct order.
+      countMessage.after(card);
+    });
+  }
+
+  // Keep the scan summary and history visible.
+  if (historySection && historySection !== summary) {
+    // History is retained in the result container.
+  }
+}
+
+// Connect filter buttons.
+filterButtons.forEach(button => {
+  button.addEventListener("click", () => {
+    currentFilter = button.dataset.filter;
+
+    updateFilterButtons();
+    renderFilteredFindings();
+  });
+});
+
+// ------------------------------
 // SCAN CURRENT PAGE
 // ------------------------------
 
 scanBtn.addEventListener("click", async () => {
   result.replaceChildren();
 
+  currentFindings = [];
+  currentFilter = "All";
+
+  filterSection.hidden = true;
+  updateFilterButtons();
+
   const loading = document.createElement("p");
-  loading.textContent = "Scanning current page...";
+  loading.textContent = "Scanning current page.";
   result.appendChild(loading);
 
   scanBtn.disabled = true;
@@ -529,10 +648,10 @@ scanBtn.addEventListener("click", async () => {
 
     result.replaceChildren();
 
-    const findings = response.findings || [];
+    currentFindings = response.findings || [];
 
     // Save this scan in local history.
-    saveScanHistory(tab, findings);
+    saveScanHistory(tab, currentFindings);
 
     const heading = document.createElement("p");
 
@@ -541,14 +660,16 @@ scanBtn.addEventListener("click", async () => {
 
     result.appendChild(heading);
 
-    // Display scan summary.
-    displaySummary(findings);
+    // Display the summary for the complete scan.
+    displaySummary(currentFindings);
 
-    // Display individual findings with explanations.
-    findings.forEach((finding, index) => {
-      const card = createFindingCard(finding, index);
-      result.appendChild(card);
-    });
+    // Show filters after a successful scan.
+    filterSection.hidden = false;
+
+    updateFilterButtons();
+
+    // Render all findings initially.
+    renderFilteredFindings();
 
     // Display updated history.
     renderHistory();
@@ -589,6 +710,12 @@ clearBtn.addEventListener("click", async () => {
     }
 
     result.replaceChildren();
+
+    currentFindings = [];
+    currentFilter = "All";
+
+    filterSection.hidden = true;
+    updateFilterButtons();
 
     const message = document.createElement("p");
     message.textContent = "Highlights cleared.";
