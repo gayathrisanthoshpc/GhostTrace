@@ -163,7 +163,6 @@ function displaySummary(findings) {
 // SCAN HISTORY
 // ------------------------------
 
-// Get saved history from local browser storage.
 function getScanHistory() {
   try {
     const history = JSON.parse(
@@ -176,7 +175,6 @@ function getScanHistory() {
   }
 }
 
-// Save a new scan to history.
 function saveScanHistory(tab, findings) {
   const history = getScanHistory();
 
@@ -201,7 +199,7 @@ function saveScanHistory(tab, findings) {
   ).length;
 
   const scanRecord = {
-    website: website,
+    website,
     scannedAt: new Date().toISOString(),
     total: findings.length,
     high: highCount,
@@ -209,18 +207,14 @@ function saveScanHistory(tab, findings) {
     low: lowCount
   };
 
-  // Add newest scan first and keep only five.
   history.unshift(scanRecord);
-
-  const updatedHistory = history.slice(0, MAX_HISTORY);
 
   localStorage.setItem(
     HISTORY_KEY,
-    JSON.stringify(updatedHistory)
+    JSON.stringify(history.slice(0, MAX_HISTORY))
   );
 }
 
-// Display the saved scan history.
 function renderHistory() {
   const history = getScanHistory();
 
@@ -354,6 +348,151 @@ function renderHistory() {
 }
 
 // ------------------------------
+// EXPLAINABLE FINDINGS
+// ------------------------------
+
+// Create a reusable explanation section.
+function createExplanationSection(title, text, color) {
+  const section = document.createElement("div");
+
+  Object.assign(section.style, {
+    marginTop: "10px",
+    padding: "10px",
+    background: "#f8fafc",
+    borderLeft: `3px solid ${color}`,
+    borderRadius: "5px"
+  });
+
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+
+  Object.assign(heading.style, {
+    display: "block",
+    fontSize: "12px",
+    color: color,
+    marginBottom: "5px"
+  });
+
+  const description = document.createElement("p");
+  description.textContent = text || "No additional details available.";
+
+  Object.assign(description.style, {
+    fontSize: "12px",
+    lineHeight: "1.5",
+    color: "#334155",
+    margin: "0"
+  });
+
+  section.append(heading, description);
+
+  return section;
+}
+
+// Create a complete finding card.
+function createFindingCard(finding, index) {
+  const card = document.createElement("div");
+  card.className = "finding";
+
+  Object.assign(card.style, {
+    marginBottom: "12px",
+    padding: "12px",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+    background: "#ffffff"
+  });
+
+  // Finding title.
+  const title = document.createElement("strong");
+
+  title.textContent =
+    `${index + 1}. ${finding.description}`;
+
+  Object.assign(title.style, {
+    display: "block",
+    fontSize: "14px",
+    lineHeight: "1.5",
+    color: "#0f172a",
+    overflowWrap: "anywhere"
+  });
+
+  // Risk badge.
+  const riskLevel = finding.riskLevel || "Unknown";
+  const riskScore = finding.riskScore ?? 0;
+
+  const riskBadge = document.createElement("span");
+
+  riskBadge.textContent =
+    `${riskLevel} Risk · ${riskScore}/100`;
+
+  Object.assign(riskBadge.style, {
+    display: "inline-block",
+    marginTop: "8px",
+    marginBottom: "8px",
+    padding: "4px 8px",
+    borderRadius: "12px",
+    backgroundColor: getRiskColor(riskLevel),
+    color: "#ffffff",
+    fontSize: "12px",
+    fontWeight: "bold"
+  });
+
+  // Detection reasons.
+  const reasons = document.createElement("div");
+
+  const reasonsHeading = document.createElement("strong");
+  reasonsHeading.textContent = "Why flagged";
+
+  Object.assign(reasonsHeading.style, {
+    display: "block",
+    fontSize: "12px",
+    color: "#334155",
+    marginBottom: "5px"
+  });
+
+  const reasonsList = document.createElement("ul");
+
+  Object.assign(reasonsList.style, {
+    paddingLeft: "18px",
+    margin: "0",
+    fontSize: "12px",
+    lineHeight: "1.6",
+    color: "#475569"
+  });
+
+  (finding.reasons || []).forEach(reason => {
+    const item = document.createElement("li");
+    item.textContent = reason;
+    reasonsList.appendChild(item);
+  });
+
+  reasons.append(reasonsHeading, reasonsList);
+
+  // Plain-language explanation.
+  const explanationSection = createExplanationSection(
+    "What it means",
+    finding.explanation,
+    "#2563eb"
+  );
+
+  // Practical review recommendation.
+  const recommendationSection = createExplanationSection(
+    "What to check",
+    finding.recommendation,
+    "#0f766e"
+  );
+
+  card.append(
+    title,
+    riskBadge,
+    reasons,
+    explanationSection,
+    recommendationSection
+  );
+
+  return card;
+}
+
+// ------------------------------
 // SCAN CURRENT PAGE
 // ------------------------------
 
@@ -402,56 +541,16 @@ scanBtn.addEventListener("click", async () => {
 
     result.appendChild(heading);
 
-    // Display the existing risk summary.
+    // Display scan summary.
     displaySummary(findings);
 
-    // Display individual findings.
+    // Display individual findings with explanations.
     findings.forEach((finding, index) => {
-      const card = document.createElement("div");
-      card.className = "finding";
-
-      const title = document.createElement("strong");
-
-      title.textContent =
-        `${index + 1}. ${finding.description}`;
-
-      const riskBadge = document.createElement("span");
-
-      const riskLevel = finding.riskLevel || "Unknown";
-      const riskScore = finding.riskScore ?? 0;
-
-      riskBadge.textContent =
-        `${riskLevel} Risk · ${riskScore}/100`;
-
-      Object.assign(riskBadge.style, {
-        display: "inline-block",
-        marginTop: "8px",
-        marginBottom: "8px",
-        padding: "4px 8px",
-        borderRadius: "12px",
-        backgroundColor: getRiskColor(riskLevel),
-        color: "#ffffff",
-        fontSize: "12px",
-        fontWeight: "bold"
-      });
-
-      const details = document.createElement("small");
-
-      details.textContent =
-        (finding.reasons || []).join(" · ");
-
-      card.append(
-        title,
-        document.createElement("br"),
-        riskBadge,
-        document.createElement("br"),
-        details
-      );
-
+      const card = createFindingCard(finding, index);
       result.appendChild(card);
     });
 
-    // Show updated history below the findings.
+    // Display updated history.
     renderHistory();
 
   } catch (error) {

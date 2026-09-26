@@ -22,6 +22,49 @@
     "[tabindex]"
   ].join(",");
 
+  // Explain each detection rule in simple language.
+  const explanations = {
+    "Interactive element has very low opacity": {
+      meaning:
+        "This element is almost transparent but can still be interactive. " +
+        "It may be hidden visually while remaining clickable.",
+
+      recommendation:
+        "Check whether the element is intentionally transparent or is " +
+        "covering another part of the page."
+    },
+
+    "Interactive element is unusually small": {
+      meaning:
+        "This interactive element is smaller than expected and may be " +
+        "difficult to notice or click.",
+
+      recommendation:
+        "Check whether it is a legitimate small control or an unexpected " +
+        "clickable target."
+    },
+
+    "Large, nearly invisible interactive element": {
+      meaning:
+        "This element covers a large part of the page while having " +
+        "very low opacity. It could potentially intercept user clicks.",
+
+      recommendation:
+        "Inspect its position and purpose. Check whether it sits over " +
+        "visible content or important buttons."
+    },
+
+    "Overlaps another visible interactive target": {
+      meaning:
+        "This element overlaps a different visible interactive element. " +
+        "It could potentially interfere with the user's intended click.",
+
+      recommendation:
+        "Check which element receives the click and whether the overlap " +
+        "is expected."
+    }
+  };
+
   // Check whether two rectangles overlap.
   function rectanglesOverlap(a, b) {
     return (
@@ -80,6 +123,37 @@
     return {
       score,
       level
+    };
+  }
+
+  // Generate plain-language explanations for findings.
+  function explainFinding(reasons) {
+    const meaningParts = [];
+    const recommendationParts = [];
+
+    for (const reason of reasons) {
+      const explanation = explanations[reason];
+
+      if (explanation) {
+        if (!meaningParts.includes(explanation.meaning)) {
+          meaningParts.push(explanation.meaning);
+        }
+
+        if (
+          !recommendationParts.includes(
+            explanation.recommendation
+          )
+        ) {
+          recommendationParts.push(
+            explanation.recommendation
+          );
+        }
+      }
+    }
+
+    return {
+      explanation: meaningParts.join(" "),
+      recommendation: recommendationParts.join(" ")
     };
   }
 
@@ -193,11 +267,22 @@
         );
       }
 
-      // Calculate the risk after all reasons are added.
+      // Calculate risk after all reasons are added.
       const risk = calculateRisk(finding.reasons);
 
       finding.riskScore = risk.score;
       finding.riskLevel = risk.level;
+
+      // Attach the explanation to this finding.
+      const explanation = explainFinding(
+        finding.reasons
+      );
+
+      finding.explanation =
+        explanation.explanation;
+
+      finding.recommendation =
+        explanation.recommendation;
     }
 
     return findings;
@@ -243,7 +328,9 @@
         description,
         reasons,
         riskLevel,
-        riskScore
+        riskScore,
+        explanation,
+        recommendation
       } = finding;
 
       // Create the red highlight box.
@@ -285,8 +372,12 @@
         pointerEvents: "none"
       });
 
+      // Include explanations in the highlight tooltip.
       label.title =
-        `${description}\n\n${reasons.join("\n")}`;
+        `${description}\n\n` +
+        `Why flagged:\n${reasons.join("\n")}\n\n` +
+        `What it means:\n${explanation}\n\n` +
+        `What to check:\n${recommendation}`;
 
       box.appendChild(label);
       layer.appendChild(box);
@@ -313,12 +404,16 @@
               reasons,
               rect,
               riskLevel,
-              riskScore
+              riskScore,
+              explanation,
+              recommendation
             }) => ({
               description,
               reasons,
               riskLevel,
               riskScore,
+              explanation,
+              recommendation,
 
               rect: {
                 x: rect.x,
