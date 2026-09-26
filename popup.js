@@ -12,6 +12,23 @@ async function getCurrentTab() {
   return tab;
 }
 
+// Return a color based on the risk level.
+function getRiskColor(level) {
+  switch (level) {
+    case "High":
+      return "#dc2626";
+
+    case "Medium":
+      return "#d97706";
+
+    case "Low":
+      return "#16a34a";
+
+    default:
+      return "#64748b";
+  }
+}
+
 scanBtn.addEventListener("click", async () => {
   result.replaceChildren();
 
@@ -24,8 +41,13 @@ scanBtn.addEventListener("click", async () => {
   try {
     const tab = await getCurrentTab();
 
-    if (!tab?.id || !tab.url?.startsWith("http") &&
-        !tab.url?.startsWith("file:")) {
+    if (
+      !tab?.id ||
+      (
+        !tab.url?.startsWith("http") &&
+        !tab.url?.startsWith("file:")
+      )
+    ) {
       throw new Error(
         "Open a supported webpage before scanning."
       );
@@ -61,17 +83,47 @@ scanBtn.addEventListener("click", async () => {
       const card = document.createElement("div");
       card.className = "finding";
 
+      // Finding title.
       const title = document.createElement("strong");
 
       title.textContent =
         `${index + 1}. ${finding.description}`;
 
+      // Risk badge.
+      const riskBadge = document.createElement("span");
+
+      const riskLevel = finding.riskLevel || "Unknown";
+      const riskScore = finding.riskScore ?? 0;
+
+      riskBadge.textContent =
+        `${riskLevel} Risk · ${riskScore}/100`;
+
+      Object.assign(riskBadge.style, {
+        display: "inline-block",
+        marginTop: "8px",
+        marginBottom: "8px",
+        padding: "4px 8px",
+        borderRadius: "12px",
+        backgroundColor: getRiskColor(riskLevel),
+        color: "#ffffff",
+        fontSize: "12px",
+        fontWeight: "bold"
+      });
+
+      // Reasons for the finding.
       const details = document.createElement("small");
 
       details.textContent =
         finding.reasons.join(" · ");
 
-      card.append(title, details);
+      card.append(
+        title,
+        document.createElement("br"),
+        riskBadge,
+        document.createElement("br"),
+        details
+      );
+
       result.appendChild(card);
     });
   } catch (error) {

@@ -7,6 +7,9 @@
 
   window.__ghostTraceInstalled = true;
 
+  const HIGHLIGHT_LAYER_ID =
+    "__ghosttrace_highlight_layer";
+
   // Elements that users can potentially interact with.
   const selector = [
     "a",
@@ -19,9 +22,6 @@
     "[tabindex]"
   ].join(",");
 
-  const HIGHLIGHT_LAYER_ID =
-    "__ghosttrace_highlight_layer";
-
   // Check whether two rectangles overlap.
   function rectanglesOverlap(a, b) {
     return (
@@ -30,6 +30,57 @@
       a.top < b.bottom &&
       a.bottom > b.top
     );
+  }
+
+  // Assign a risk level based on suspicious behaviour.
+  function calculateRisk(reasons) {
+    let score = 0;
+
+    for (const reason of reasons) {
+      if (
+        reason ===
+        "Interactive element has very low opacity"
+      ) {
+        score += 40;
+      }
+
+      if (
+        reason ===
+        "Interactive element is unusually small"
+      ) {
+        score += 20;
+      }
+
+      if (
+        reason ===
+        "Large, nearly invisible interactive element"
+      ) {
+        score += 30;
+      }
+
+      if (
+        reason ===
+        "Overlaps another visible interactive target"
+      ) {
+        score += 40;
+      }
+    }
+
+    // Keep the score within 0–100.
+    score = Math.min(score, 100);
+
+    let level = "Low";
+
+    if (score >= 70) {
+      level = "High";
+    } else if (score >= 40) {
+      level = "Medium";
+    }
+
+    return {
+      score,
+      level
+    };
   }
 
   function scanPage() {
@@ -41,10 +92,8 @@
     const visibleTargets = [];
 
     for (const el of elements) {
-      // Ignore elements created by GhostTrace itself.
-      if (
-        el.closest(`#${HIGHLIGHT_LAYER_ID}`)
-      ) {
+      // Ignore elements created by GhostTrace.
+      if (el.closest(`#${HIGHLIGHT_LAYER_ID}`)) {
         continue;
       }
 
@@ -78,8 +127,8 @@
           window.innerHeight *
           0.25;
 
-      // Only record visible, reasonably sized targets
-      // for the overlap comparison.
+      // Record visible, reasonably sized targets
+      // for overlap comparisons.
       if (!nearlyInvisible && !unusuallySmall) {
         visibleTargets.push({
           element: el,
@@ -143,6 +192,12 @@
           "Overlaps another visible interactive target"
         );
       }
+
+      // Calculate the risk after all reasons are added.
+      const risk = calculateRisk(finding.reasons);
+
+      finding.riskScore = risk.score;
+      finding.riskLevel = risk.level;
     }
 
     return findings;
@@ -160,7 +215,7 @@
     }
   }
 
-  // Draw highly visible highlights above the webpage.
+  // Draw visible highlight boxes and risk labels.
   function highlightFindings(findings) {
     clearHighlights();
 
@@ -168,7 +223,6 @@
       return;
     }
 
-    // Create a separate layer for our highlights.
     const layer = document.createElement("div");
 
     layer.id = HIGHLIGHT_LAYER_ID;
@@ -187,10 +241,12 @@
       const {
         rect,
         description,
-        reasons
+        reasons,
+        riskLevel,
+        riskScore
       } = finding;
 
-      // Create a visible box around the suspicious element.
+      // Create the red highlight box.
       const box = document.createElement("div");
 
       Object.assign(box.style, {
@@ -206,17 +262,17 @@
         pointerEvents: "none"
       });
 
-      // Add a label explaining the suspicious element.
+      // Create the risk label.
       const label = document.createElement("div");
 
       label.textContent =
-        `GhostTrace: ${description}`;
+        `GhostTrace: ${riskLevel} Risk (${riskScore}/100)`;
 
       Object.assign(label.style, {
         position: "fixed",
         left: `${Math.max(0, rect.left)}px`,
         top: `${Math.max(0, rect.top - 30)}px`,
-        maxWidth: "260px",
+        maxWidth: "280px",
         padding: "5px 9px",
         background: "#ff3b30",
         color: "#ffffff",
@@ -229,8 +285,8 @@
         pointerEvents: "none"
       });
 
-      // Show the reasons when the label is hovered.
-      label.title = reasons.join("\n");
+      label.title =
+        `${description}\n\n${reasons.join("\n")}`;
 
       box.appendChild(label);
       layer.appendChild(box);
@@ -248,14 +304,21 @@
         highlightFindings(findings);
 
         // Send plain data to the popup.
-        // Never send DOM elements directly.
         sendResponse({
           count: findings.length,
 
           findings: findings.map(
-            ({ description, reasons, rect }) => ({
+            ({
               description,
               reasons,
+              rect,
+              riskLevel,
+              riskScore
+            }) => ({
+              description,
+              reasons,
+              riskLevel,
+              riskScore,
 
               rect: {
                 x: rect.x,
