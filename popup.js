@@ -3,6 +3,9 @@ const scanBtn = document.getElementById("scanBtn");
 const clearBtn = document.getElementById("clearBtn");
 const result = document.getElementById("result");
 
+const HISTORY_KEY = "ghostTraceScanHistory";
+const MAX_HISTORY = 5;
+
 // Get the currently active Chrome tab.
 async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({
@@ -18,13 +21,10 @@ function getRiskColor(level) {
   switch (level) {
     case "High":
       return "#dc2626";
-
     case "Medium":
       return "#d97706";
-
     case "Low":
       return "#16a34a";
-
     default:
       return "#64748b";
   }
@@ -46,7 +46,6 @@ function createSummaryCard(label, count, color) {
   });
 
   const number = document.createElement("div");
-
   number.textContent = count;
 
   Object.assign(number.style, {
@@ -57,7 +56,6 @@ function createSummaryCard(label, count, color) {
   });
 
   const title = document.createElement("div");
-
   title.textContent = label;
 
   Object.assign(title.style, {
@@ -74,18 +72,17 @@ function createSummaryCard(label, count, color) {
 // Display the scan summary.
 function displaySummary(findings) {
   const highCount = findings.filter(
-    (finding) => finding.riskLevel === "High"
+    finding => finding.riskLevel === "High"
   ).length;
 
   const mediumCount = findings.filter(
-    (finding) => finding.riskLevel === "Medium"
+    finding => finding.riskLevel === "Medium"
   ).length;
 
   const lowCount = findings.filter(
-    (finding) => finding.riskLevel === "Low"
+    finding => finding.riskLevel === "Low"
   ).length;
 
-  // Summary container.
   const summary = document.createElement("div");
 
   Object.assign(summary.style, {
@@ -96,9 +93,7 @@ function displaySummary(findings) {
     borderRadius: "12px"
   });
 
-  // Summary heading.
   const heading = document.createElement("h3");
-
   heading.textContent = "Scan Summary";
 
   Object.assign(heading.style, {
@@ -109,7 +104,6 @@ function displaySummary(findings) {
 
   summary.appendChild(heading);
 
-  // Total findings card.
   const totalCard = createSummaryCard(
     "Total Issues",
     findings.length,
@@ -117,10 +111,8 @@ function displaySummary(findings) {
   );
 
   totalCard.style.marginBottom = "10px";
-
   summary.appendChild(totalCard);
 
-  // Risk-level cards.
   const riskCards = document.createElement("div");
 
   Object.assign(riskCards.style, {
@@ -130,49 +122,30 @@ function displaySummary(findings) {
   });
 
   riskCards.append(
-    createSummaryCard(
-      "High",
-      highCount,
-      getRiskColor("High")
-    ),
-
-    createSummaryCard(
-      "Medium",
-      mediumCount,
-      getRiskColor("Medium")
-    ),
-
-    createSummaryCard(
-      "Low",
-      lowCount,
-      getRiskColor("Low")
-    )
+    createSummaryCard("High", highCount, getRiskColor("High")),
+    createSummaryCard("Medium", mediumCount, getRiskColor("Medium")),
+    createSummaryCard("Low", lowCount, getRiskColor("Low"))
   );
 
   summary.appendChild(riskCards);
 
-  // Overall summary message.
   const message = document.createElement("p");
 
   if (highCount > 0) {
     message.textContent =
       "High-risk indicators detected. Review these elements carefully.";
-
     message.style.color = "#b91c1c";
   } else if (mediumCount > 0) {
     message.textContent =
       "Some suspicious indicators were detected. Review the flagged elements.";
-
     message.style.color = "#b45309";
   } else if (lowCount > 0) {
     message.textContent =
       "Only low-risk indicators were detected. Review the findings for context.";
-
     message.style.color = "#15803d";
   } else {
     message.textContent =
       "No suspicious elements detected by these checks. This does not guarantee that the website is safe.";
-
     message.style.color = "#475569";
   }
 
@@ -183,18 +156,212 @@ function displaySummary(findings) {
   });
 
   summary.appendChild(message);
-
   result.appendChild(summary);
 }
 
-// Scan the current page.
+// ------------------------------
+// SCAN HISTORY
+// ------------------------------
+
+// Get saved history from local browser storage.
+function getScanHistory() {
+  try {
+    const history = JSON.parse(
+      localStorage.getItem(HISTORY_KEY) || "[]"
+    );
+
+    return Array.isArray(history) ? history : [];
+  } catch {
+    return [];
+  }
+}
+
+// Save a new scan to history.
+function saveScanHistory(tab, findings) {
+  const history = getScanHistory();
+
+  let website = "Unknown website";
+
+  try {
+    website = new URL(tab.url).hostname;
+  } catch {
+    website = tab.title || "Unknown website";
+  }
+
+  const highCount = findings.filter(
+    finding => finding.riskLevel === "High"
+  ).length;
+
+  const mediumCount = findings.filter(
+    finding => finding.riskLevel === "Medium"
+  ).length;
+
+  const lowCount = findings.filter(
+    finding => finding.riskLevel === "Low"
+  ).length;
+
+  const scanRecord = {
+    website: website,
+    scannedAt: new Date().toISOString(),
+    total: findings.length,
+    high: highCount,
+    medium: mediumCount,
+    low: lowCount
+  };
+
+  // Add newest scan first and keep only five.
+  history.unshift(scanRecord);
+
+  const updatedHistory = history.slice(0, MAX_HISTORY);
+
+  localStorage.setItem(
+    HISTORY_KEY,
+    JSON.stringify(updatedHistory)
+  );
+}
+
+// Display the saved scan history.
+function renderHistory() {
+  const history = getScanHistory();
+
+  const section = document.createElement("div");
+
+  Object.assign(section.style, {
+    margin: "16px 0",
+    padding: "14px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px"
+  });
+
+  const header = document.createElement("div");
+
+  Object.assign(header.style, {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "12px"
+  });
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Scan History";
+
+  Object.assign(heading.style, {
+    margin: "0",
+    fontSize: "16px",
+    color: "#0f172a"
+  });
+
+  header.appendChild(heading);
+
+  if (history.length > 0) {
+    const clearHistoryBtn = document.createElement("button");
+
+    clearHistoryBtn.textContent = "Clear";
+
+    Object.assign(clearHistoryBtn.style, {
+      border: "none",
+      background: "#fee2e2",
+      color: "#b91c1c",
+      padding: "5px 9px",
+      borderRadius: "6px",
+      cursor: "pointer",
+      fontSize: "12px",
+      fontWeight: "600"
+    });
+
+    clearHistoryBtn.addEventListener("click", () => {
+      localStorage.removeItem(HISTORY_KEY);
+      renderHistory();
+    });
+
+    header.appendChild(clearHistoryBtn);
+  }
+
+  section.appendChild(header);
+
+  if (history.length === 0) {
+    const emptyMessage = document.createElement("p");
+
+    emptyMessage.textContent =
+      "No scans yet. Scan a webpage to see your history here.";
+
+    Object.assign(emptyMessage.style, {
+      fontSize: "13px",
+      color: "#64748b",
+      lineHeight: "1.5",
+      margin: "0"
+    });
+
+    section.appendChild(emptyMessage);
+  } else {
+    history.forEach((item, index) => {
+      const card = document.createElement("div");
+
+      Object.assign(card.style, {
+        padding: "10px",
+        marginBottom:
+          index === history.length - 1 ? "0" : "8px",
+        background: "#f8fafc",
+        border: "1px solid #e2e8f0",
+        borderRadius: "8px"
+      });
+
+      const website = document.createElement("strong");
+      website.textContent = item.website;
+
+      Object.assign(website.style, {
+        display: "block",
+        fontSize: "13px",
+        color: "#0f172a",
+        overflowWrap: "anywhere"
+      });
+
+      const time = document.createElement("p");
+
+      time.textContent = new Date(
+        item.scannedAt
+      ).toLocaleString();
+
+      Object.assign(time.style, {
+        fontSize: "11px",
+        color: "#64748b",
+        margin: "5px 0 8px"
+      });
+
+      const count = document.createElement("p");
+
+      count.textContent =
+        `${item.total} issue(s) · ` +
+        `High: ${item.high} · ` +
+        `Medium: ${item.medium} · ` +
+        `Low: ${item.low}`;
+
+      Object.assign(count.style, {
+        fontSize: "12px",
+        color: "#475569",
+        margin: "0",
+        lineHeight: "1.5"
+      });
+
+      card.append(website, time, count);
+      section.appendChild(card);
+    });
+  }
+
+  result.appendChild(section);
+}
+
+// ------------------------------
+// SCAN CURRENT PAGE
+// ------------------------------
+
 scanBtn.addEventListener("click", async () => {
   result.replaceChildren();
 
   const loading = document.createElement("p");
-
   loading.textContent = "Scanning current page...";
-
   result.appendChild(loading);
 
   scanBtn.disabled = true;
@@ -223,7 +390,11 @@ scanBtn.addEventListener("click", async () => {
 
     result.replaceChildren();
 
-    // Display the total number of findings.
+    const findings = response.findings || [];
+
+    // Save this scan in local history.
+    saveScanHistory(tab, findings);
+
     const heading = document.createElement("p");
 
     heading.textContent =
@@ -231,29 +402,23 @@ scanBtn.addEventListener("click", async () => {
 
     result.appendChild(heading);
 
-    // Display the risk summary.
-    displaySummary(response.findings);
+    // Display the existing risk summary.
+    displaySummary(findings);
 
     // Display individual findings.
-    response.findings.forEach((finding, index) => {
+    findings.forEach((finding, index) => {
       const card = document.createElement("div");
-
       card.className = "finding";
 
-      // Finding title.
       const title = document.createElement("strong");
 
       title.textContent =
         `${index + 1}. ${finding.description}`;
 
-      // Risk badge.
       const riskBadge = document.createElement("span");
 
-      const riskLevel =
-        finding.riskLevel || "Unknown";
-
-      const riskScore =
-        finding.riskScore ?? 0;
+      const riskLevel = finding.riskLevel || "Unknown";
+      const riskScore = finding.riskScore ?? 0;
 
       riskBadge.textContent =
         `${riskLevel} Risk · ${riskScore}/100`;
@@ -270,11 +435,10 @@ scanBtn.addEventListener("click", async () => {
         fontWeight: "bold"
       });
 
-      // Reasons for the finding.
       const details = document.createElement("small");
 
       details.textContent =
-        finding.reasons.join(" · ");
+        (finding.reasons || []).join(" · ");
 
       card.append(
         title,
@@ -286,6 +450,10 @@ scanBtn.addEventListener("click", async () => {
 
       result.appendChild(card);
     });
+
+    // Show updated history below the findings.
+    renderHistory();
+
   } catch (error) {
     result.replaceChildren();
 
@@ -296,12 +464,18 @@ scanBtn.addEventListener("click", async () => {
       "Could not scan this page. Reload the website and try again.";
 
     result.appendChild(message);
+
+    renderHistory();
+
   } finally {
     scanBtn.disabled = false;
   }
 });
 
-// Clear the highlights.
+// ------------------------------
+// CLEAR HIGHLIGHTS
+// ------------------------------
+
 clearBtn.addEventListener("click", async () => {
   try {
     const tab = await getCurrentTab();
@@ -318,12 +492,25 @@ clearBtn.addEventListener("click", async () => {
     result.replaceChildren();
 
     const message = document.createElement("p");
-
     message.textContent = "Highlights cleared.";
 
     result.appendChild(message);
+
+    renderHistory();
+
   } catch {
-    result.textContent =
+    result.replaceChildren();
+
+    const message = document.createElement("p");
+
+    message.textContent =
       "Reload the page to remove any remaining highlights.";
+
+    result.appendChild(message);
+
+    renderHistory();
   }
 });
+
+// Show saved history whenever the popup opens.
+renderHistory();
