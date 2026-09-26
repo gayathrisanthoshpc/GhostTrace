@@ -9,11 +9,13 @@ const filterButtons = document.querySelectorAll(".filter-btn");
 const HISTORY_KEY = "ghostTraceScanHistory";
 const MAX_HISTORY = 5;
 
-// Store the current scan and selected filter.
 let currentFindings = [];
 let currentFilter = "All";
 
-// Get the currently active Chrome tab.
+// ------------------------------
+// CURRENT TAB
+// ------------------------------
+
 async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({
     active: true,
@@ -23,7 +25,10 @@ async function getCurrentTab() {
   return tab;
 }
 
-// Get the color for each risk level.
+// ------------------------------
+// RISK COLORS
+// ------------------------------
+
 function getRiskColor(level) {
   switch (level) {
     case "High":
@@ -37,7 +42,10 @@ function getRiskColor(level) {
   }
 }
 
-// Create a reusable summary card.
+// ------------------------------
+// SUMMARY
+// ------------------------------
+
 function createSummaryCard(label, count, color) {
   const card = document.createElement("div");
 
@@ -58,7 +66,7 @@ function createSummaryCard(label, count, color) {
   Object.assign(number.style, {
     fontSize: "24px",
     fontWeight: "bold",
-    color: color,
+    color,
     marginBottom: "4px"
   });
 
@@ -76,7 +84,6 @@ function createSummaryCard(label, count, color) {
   return card;
 }
 
-// Display the scan summary.
 function displaySummary(findings) {
   const highCount = findings.filter(
     finding => finding.riskLevel === "High"
@@ -91,6 +98,7 @@ function displaySummary(findings) {
   ).length;
 
   const summary = document.createElement("div");
+  summary.id = "scanSummary";
 
   Object.assign(summary.style, {
     margin: "12px 0 16px",
@@ -216,16 +224,28 @@ function saveScanHistory(tab, findings) {
 
   history.unshift(scanRecord);
 
-  localStorage.setItem(
-    HISTORY_KEY,
-    JSON.stringify(history.slice(0, MAX_HISTORY))
-  );
+  try {
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify(history.slice(0, MAX_HISTORY))
+    );
+  } catch (error) {
+    console.error("Could not save scan history:", error);
+  }
 }
 
 function renderHistory() {
+  // Remove the old history section before rendering a new one.
+  const oldSection = document.getElementById("historySection");
+
+  if (oldSection) {
+    oldSection.remove();
+  }
+
   const history = getScanHistory();
 
   const section = document.createElement("div");
+  section.id = "historySection";
 
   Object.assign(section.style, {
     margin: "16px 0",
@@ -321,7 +341,6 @@ function renderHistory() {
       });
 
       const time = document.createElement("p");
-
       time.textContent = new Date(
         item.scannedAt
       ).toLocaleString();
@@ -356,7 +375,7 @@ function renderHistory() {
 }
 
 // ------------------------------
-// EXPLAINABLE FINDINGS
+// REUSABLE EXPLANATION SECTION
 // ------------------------------
 
 function createExplanationSection(title, text, color) {
@@ -376,18 +395,21 @@ function createExplanationSection(title, text, color) {
   Object.assign(heading.style, {
     display: "block",
     fontSize: "12px",
-    color: color,
+    color,
     marginBottom: "5px"
   });
 
   const description = document.createElement("p");
-  description.textContent = text || "No additional details available.";
+
+  description.textContent =
+    text || "No additional details available.";
 
   Object.assign(description.style, {
     fontSize: "12px",
     lineHeight: "1.5",
     color: "#334155",
-    margin: "0"
+    margin: "0",
+    overflowWrap: "anywhere"
   });
 
   section.append(heading, description);
@@ -395,7 +417,101 @@ function createExplanationSection(title, text, color) {
   return section;
 }
 
-// Create a complete finding card.
+// ------------------------------
+// ELEMENT DETAILS
+// ------------------------------
+
+// Display the type, label, and destination of the flagged element.
+function createElementDetailsSection(finding) {
+  const section = document.createElement("div");
+
+  Object.assign(section.style, {
+    marginTop: "10px",
+    padding: "10px",
+    background: "#f1f5f9",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px"
+  });
+
+  const heading = document.createElement("strong");
+  heading.textContent = "Element Details";
+
+  Object.assign(heading.style, {
+    display: "block",
+    fontSize: "12px",
+    color: "#0f172a",
+    marginBottom: "8px"
+  });
+
+  section.appendChild(heading);
+
+  // Add one labeled row for each detail.
+  function addDetail(label, value) {
+    const row = document.createElement("div");
+
+    Object.assign(row.style, {
+      marginBottom: "7px",
+      fontSize: "12px",
+      lineHeight: "1.5",
+      overflowWrap: "anywhere"
+    });
+
+    const detailLabel = document.createElement("strong");
+    detailLabel.textContent = `${label}: `;
+
+    Object.assign(detailLabel.style, {
+      color: "#334155"
+    });
+
+    const detailValue = document.createElement("span");
+    detailValue.textContent = value;
+
+    Object.assign(detailValue.style, {
+      color: "#475569",
+      overflowWrap: "anywhere"
+    });
+
+    row.append(detailLabel, detailValue);
+
+    section.appendChild(row);
+  }
+
+  const elementType = finding.elementType || "Unknown";
+  const elementLabel = finding.elementLabel || "No label available";
+  const destination = finding.destination || "";
+
+  addDetail("Type", elementType);
+  addDetail("Label", elementLabel);
+
+  if (destination) {
+    addDetail("Destination", destination);
+  } else {
+    addDetail("Destination", "No destination available");
+  }
+
+  // Explain that the details describe the element,
+  // not whether the destination is definitely malicious.
+  const note = document.createElement("p");
+
+  note.textContent =
+    "These details identify the flagged element. A destination or label alone does not prove that a website is malicious.";
+
+  Object.assign(note.style, {
+    fontSize: "11px",
+    lineHeight: "1.5",
+    color: "#64748b",
+    margin: "6px 0 0"
+  });
+
+  section.appendChild(note);
+
+  return section;
+}
+
+// ------------------------------
+// FINDING CARD
+// ------------------------------
+
 function createFindingCard(finding, index) {
   const card = document.createElement("div");
   card.className = "finding";
@@ -411,7 +527,7 @@ function createFindingCard(finding, index) {
   const title = document.createElement("strong");
 
   title.textContent =
-    `${index + 1}. ${finding.description}`;
+    `${index + 1}. ${finding.description || "Potential issue detected"}`;
 
   Object.assign(title.style, {
     display: "block",
@@ -438,7 +554,12 @@ function createFindingCard(finding, index) {
     riskBadge.classList.add("risk-low");
   }
 
+  // Why flagged
   const reasons = document.createElement("div");
+
+  Object.assign(reasons.style, {
+    marginTop: "10px"
+  });
 
   const reasonsHeading = document.createElement("strong");
   reasonsHeading.textContent = "Why flagged";
@@ -460,14 +581,28 @@ function createFindingCard(finding, index) {
     color: "#475569"
   });
 
-  (finding.reasons || []).forEach(reason => {
+  const findingReasons = Array.isArray(finding.reasons)
+    ? finding.reasons
+    : [];
+
+  if (findingReasons.length === 0) {
     const item = document.createElement("li");
-    item.textContent = reason;
+    item.textContent = "No specific reasons provided.";
     reasonsList.appendChild(item);
-  });
+  } else {
+    findingReasons.forEach(reason => {
+      const item = document.createElement("li");
+      item.textContent = reason;
+      reasonsList.appendChild(item);
+    });
+  }
 
   reasons.append(reasonsHeading, reasonsList);
 
+  // New: element details
+  const elementDetails = createElementDetailsSection(finding);
+
+  // Existing explanations
   const explanationSection = createExplanationSection(
     "What it means",
     finding.explanation,
@@ -483,6 +618,7 @@ function createFindingCard(finding, index) {
   card.append(
     title,
     riskBadge,
+    elementDetails,
     reasons,
     explanationSection,
     recommendationSection
@@ -495,21 +631,31 @@ function createFindingCard(finding, index) {
 // SEVERITY FILTERING
 // ------------------------------
 
-// Update the selected filter button.
 function updateFilterButtons() {
   filterButtons.forEach(button => {
     const isActive = button.dataset.filter === currentFilter;
 
     button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
+
+    button.setAttribute(
+      "aria-pressed",
+      String(isActive)
+    );
   });
 }
 
-// Display findings matching the selected risk level.
+// Render the filtered findings in a dedicated container.
+// This prevents filtering from deleting the summary or history.
 function renderFilteredFindings() {
-  // Remove the old finding cards but preserve the summary and history.
-  const oldCards = result.querySelectorAll(".finding");
-  oldCards.forEach(card => card.remove());
+  const findingsContainer = document.getElementById(
+    "findingsContainer"
+  );
+
+  if (!findingsContainer) {
+    return;
+  }
+
+  findingsContainer.replaceChildren();
 
   const filteredFindings = currentFilter === "All"
     ? currentFindings
@@ -517,7 +663,6 @@ function renderFilteredFindings() {
         finding => finding.riskLevel === currentFilter
       );
 
-  // Show how many findings match the current filter.
   const countMessage = document.createElement("p");
 
   countMessage.className = "filter-count";
@@ -531,27 +676,7 @@ function renderFilteredFindings() {
     color: "#aab5cc"
   });
 
-  // Remove any previous count message.
-  const oldCount = result.querySelector(".filter-count");
-  if (oldCount) {
-    oldCount.remove();
-  }
-
-  // Insert the count before the finding cards.
-  const historySection = result.querySelector(
-    ":scope > div:last-child"
-  );
-
-  // Find a stable insertion point after the summary.
-  const summary = result.querySelector(
-    ":scope > div"
-  );
-
-  if (summary) {
-    result.insertBefore(countMessage, summary.nextSibling);
-  } else {
-    result.prepend(countMessage);
-  }
+  findingsContainer.appendChild(countMessage);
 
   if (filteredFindings.length === 0) {
     const emptyMessage = document.createElement("p");
@@ -571,31 +696,16 @@ function renderFilteredFindings() {
       color: "#aab5cc"
     });
 
-    result.insertBefore(
-      emptyMessage,
-      countMessage.nextSibling
-    );
-  } else {
-    filteredFindings.forEach((finding, index) => {
-      const card = createFindingCard(finding, index);
-
-      result.insertBefore(
-        card,
-        countMessage.nextSibling
-      );
-
-      // Keep cards in the correct order.
-      countMessage.after(card);
-    });
+    findingsContainer.appendChild(emptyMessage);
+    return;
   }
 
-  // Keep the scan summary and history visible.
-  if (historySection && historySection !== summary) {
-    // History is retained in the result container.
-  }
+  filteredFindings.forEach((finding, index) => {
+    const card = createFindingCard(finding, index);
+    findingsContainer.appendChild(card);
+  });
 }
 
-// Connect filter buttons.
 filterButtons.forEach(button => {
   button.addEventListener("click", () => {
     currentFilter = button.dataset.filter;
@@ -620,6 +730,7 @@ scanBtn.addEventListener("click", async () => {
 
   const loading = document.createElement("p");
   loading.textContent = "Scanning current page.";
+
   result.appendChild(loading);
 
   scanBtn.disabled = true;
@@ -648,30 +759,33 @@ scanBtn.addEventListener("click", async () => {
 
     result.replaceChildren();
 
-    currentFindings = response.findings || [];
+    currentFindings = response?.findings || [];
 
-    // Save this scan in local history.
+    // Save the scan to local history.
     saveScanHistory(tab, currentFindings);
 
     const heading = document.createElement("p");
 
     heading.textContent =
-      `Found ${response.count} potential issue(s).`;
+      `Found ${currentFindings.length} potential issue(s).`;
 
     result.appendChild(heading);
 
-    // Display the summary for the complete scan.
+    // Summary always reflects the complete scan.
     displaySummary(currentFindings);
 
-    // Show filters after a successful scan.
+    // Create a dedicated findings container.
+    const findingsContainer = document.createElement("div");
+    findingsContainer.id = "findingsContainer";
+
+    result.appendChild(findingsContainer);
+
     filterSection.hidden = false;
 
     updateFilterButtons();
-
-    // Render all findings initially.
     renderFilteredFindings();
 
-    // Display updated history.
+    // Render history after findings.
     renderHistory();
 
   } catch (error) {
@@ -738,5 +852,8 @@ clearBtn.addEventListener("click", async () => {
   }
 });
 
-// Show saved history whenever the popup opens.
+// ------------------------------
+// INITIALIZE POPUP
+// ------------------------------
+
 renderHistory();

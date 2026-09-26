@@ -157,6 +157,146 @@
     };
   }
 
+  // ------------------------------
+  // ELEMENT DETAILS
+  // ------------------------------
+
+  // Get a readable name for the element type.
+  function getElementType(el) {
+    const tag = el.tagName.toLowerCase();
+
+    if (tag === "input") {
+      return `Input (${el.type || "text"})`;
+    }
+
+    if (tag === "a") {
+      return "Link";
+    }
+
+    if (tag === "button") {
+      return "Button";
+    }
+
+    if (tag === "select") {
+      return "Dropdown";
+    }
+
+    if (tag === "textarea") {
+      return "Text area";
+    }
+
+    const role = el.getAttribute("role");
+
+    if (role) {
+      return `${tag} (role: ${role})`;
+    }
+
+    if (el.hasAttribute("onclick")) {
+      return `${tag} (onclick handler)`;
+    }
+
+    if (el.hasAttribute("tabindex")) {
+      return `${tag} (keyboard accessible)`;
+    }
+
+    return tag;
+  }
+
+  // Find a readable label or text for the element.
+  function getElementLabel(el) {
+    const ariaLabel = el.getAttribute("aria-label");
+
+    if (ariaLabel?.trim()) {
+      return ariaLabel.trim().slice(0, 200);
+    }
+
+    const labelledBy = el.getAttribute("aria-labelledby");
+
+    if (labelledBy) {
+      const labelText = labelledBy
+        .split(/\s+/)
+        .map(id => document.getElementById(id)?.innerText || "")
+        .join(" ")
+        .trim();
+
+      if (labelText) {
+        return labelText.slice(0, 200);
+      }
+    }
+
+    if (el.labels?.length) {
+      const labelText = Array.from(el.labels)
+        .map(label => label.innerText.trim())
+        .filter(Boolean)
+        .join(" ");
+
+      if (labelText) {
+        return labelText.slice(0, 200);
+      }
+    }
+
+    const title = el.getAttribute("title");
+
+    if (title?.trim()) {
+      return title.trim().slice(0, 200);
+    }
+
+    const placeholder = el.getAttribute("placeholder");
+
+    if (placeholder?.trim()) {
+      return placeholder.trim().slice(0, 200);
+    }
+
+    const value = el.value;
+
+    if (
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      return value.trim().slice(0, 200);
+    }
+
+    const text = el.innerText?.trim();
+
+    if (text) {
+      return text.slice(0, 200);
+    }
+
+    return "No readable label";
+  }
+
+  // Get the destination of a link, if applicable.
+  function getElementDestination(el) {
+    if (el.tagName.toLowerCase() !== "a") {
+      return null;
+    }
+
+    const href = el.getAttribute("href");
+
+    if (!href) {
+      return "No destination specified";
+    }
+
+    try {
+      return new URL(href, document.baseURI).href;
+    } catch {
+      return href;
+    }
+  }
+
+  // Collect all element details in one object.
+  function getElementDetails(el) {
+    return {
+      elementType: getElementType(el),
+      elementLabel: getElementLabel(el),
+      destination: getElementDestination(el)
+    };
+  }
+
+  // ------------------------------
+  // SCAN PAGE
+  // ------------------------------
+
   function scanPage() {
     const elements = [
       ...document.querySelectorAll(selector)
@@ -231,15 +371,17 @@
       }
 
       if (reasons.length > 0) {
+        const details = getElementDetails(el);
+
         const description =
-          el.innerText?.trim().slice(0, 80) ||
-          el.getAttribute("aria-label") ||
-          el.getAttribute("title") ||
-          el.tagName.toLowerCase();
+          details.elementLabel === "No readable label"
+            ? details.elementType
+            : details.elementLabel;
 
         findings.push({
           element: el,
           description,
+          ...details,
           reasons,
           rect
         });
@@ -287,6 +429,10 @@
 
     return findings;
   }
+
+  // ------------------------------
+  // HIGHLIGHTS
+  // ------------------------------
 
   // Remove the previous GhostTrace highlight layer.
   function clearHighlights() {
@@ -372,9 +518,11 @@
         pointerEvents: "none"
       });
 
-      // Include explanations in the highlight tooltip.
+      // Include element details in the highlight tooltip.
       label.title =
-        `${description}\n\n` +
+        `Element: ${finding.elementType}\n` +
+        `Label: ${finding.elementLabel}\n` +
+        `Destination: ${finding.destination || "Not applicable"}\n\n` +
         `Why flagged:\n${reasons.join("\n")}\n\n` +
         `What it means:\n${explanation}\n\n` +
         `What to check:\n${recommendation}`;
@@ -385,6 +533,10 @@
 
     document.documentElement.appendChild(layer);
   }
+
+  // ------------------------------
+  // MESSAGE LISTENER
+  // ------------------------------
 
   // Listen for messages from the extension popup.
   chrome.runtime.onMessage.addListener(
@@ -401,6 +553,9 @@
           findings: findings.map(
             ({
               description,
+              elementType,
+              elementLabel,
+              destination,
               reasons,
               rect,
               riskLevel,
@@ -409,6 +564,9 @@
               recommendation
             }) => ({
               description,
+              elementType,
+              elementLabel,
+              destination,
               reasons,
               riskLevel,
               riskScore,
