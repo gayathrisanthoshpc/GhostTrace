@@ -19,6 +19,9 @@
     "[tabindex]"
   ].join(",");
 
+  const HIGHLIGHT_LAYER_ID =
+    "__ghosttrace_highlight_layer";
+
   // Check whether two rectangles overlap.
   function rectanglesOverlap(a, b) {
     return (
@@ -38,6 +41,13 @@
     const visibleTargets = [];
 
     for (const el of elements) {
+      // Ignore elements created by GhostTrace itself.
+      if (
+        el.closest(`#${HIGHLIGHT_LAYER_ID}`)
+      ) {
+        continue;
+      }
+
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
 
@@ -138,50 +148,95 @@
     return findings;
   }
 
-  // Remove our previous highlights without
-  // removing the website's original inline styles.
+  // Remove the previous GhostTrace highlight layer.
   function clearHighlights() {
-    document
-      .querySelectorAll(
-        "[data-ghosttrace-highlight]"
-      )
-      .forEach((el) => {
-        el.style.outline =
-          el.dataset.ghosttraceOldOutline || "";
+    const existingLayer =
+      document.getElementById(
+        HIGHLIGHT_LAYER_ID
+      );
 
-        el.style.outlineOffset =
-          el.dataset.ghosttraceOldOffset || "";
-
-        delete el.dataset.ghosttraceOldOutline;
-        delete el.dataset.ghosttraceOldOffset;
-        delete el.dataset.ghosttraceHighlight;
-      });
+    if (existingLayer) {
+      existingLayer.remove();
+    }
   }
 
+  // Draw highly visible highlights above the webpage.
   function highlightFindings(findings) {
     clearHighlights();
 
-    findings.forEach(({ element }) => {
-      element.dataset.ghosttraceOldOutline =
-        element.style.outline;
+    if (findings.length === 0) {
+      return;
+    }
 
-      element.dataset.ghosttraceOldOffset =
-        element.style.outlineOffset;
+    // Create a separate layer for our highlights.
+    const layer = document.createElement("div");
 
-      element.dataset.ghosttraceHighlight = "true";
+    layer.id = HIGHLIGHT_LAYER_ID;
 
-      element.style.setProperty(
-        "outline",
-        "3px solid #ff3b30",
-        "important"
-      );
-
-      element.style.setProperty(
-        "outline-offset",
-        "2px",
-        "important"
-      );
+    Object.assign(layer.style, {
+      position: "fixed",
+      inset: "0",
+      width: "100%",
+      height: "100%",
+      zIndex: "2147483647",
+      pointerEvents: "none",
+      overflow: "hidden"
     });
+
+    for (const finding of findings) {
+      const {
+        rect,
+        description,
+        reasons
+      } = finding;
+
+      // Create a visible box around the suspicious element.
+      const box = document.createElement("div");
+
+      Object.assign(box.style, {
+        position: "fixed",
+        left: `${rect.left}px`,
+        top: `${rect.top}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+        boxSizing: "border-box",
+        border: "3px solid #ff3b30",
+        background: "rgba(255, 59, 48, 0.18)",
+        borderRadius: "3px",
+        pointerEvents: "none"
+      });
+
+      // Add a label explaining the suspicious element.
+      const label = document.createElement("div");
+
+      label.textContent =
+        `GhostTrace: ${description}`;
+
+      Object.assign(label.style, {
+        position: "fixed",
+        left: `${Math.max(0, rect.left)}px`,
+        top: `${Math.max(0, rect.top - 30)}px`,
+        maxWidth: "260px",
+        padding: "5px 9px",
+        background: "#ff3b30",
+        color: "#ffffff",
+        font: "bold 12px Arial, sans-serif",
+        lineHeight: "16px",
+        borderRadius: "4px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+        whiteSpace: "normal",
+        overflowWrap: "anywhere",
+        pointerEvents: "none"
+      });
+
+      // Show the reasons when the label is hovered.
+      label.title = reasons.join("\n");
+
+      box.appendChild(label);
+      layer.appendChild(box);
+    }
+
+    document.documentElement.appendChild(layer);
   }
 
   // Listen for messages from the extension popup.
