@@ -103,6 +103,49 @@
        onclick="event.preventDefault()">
       Normal test link
     </a>
+
+    <h3>Test 5: Deeply scrolled target</h3>
+
+    <p>
+      A tall spacer sits between this text and the
+      hidden flag below. Locating the flag must make
+      the page scroll down to it.
+    </p>
+
+    <div class="scroll-spacer" aria-hidden="true"></div>
+
+    <button
+      class="deep-target"
+      aria-label="Deep locate target"
+      onclick="alert('Deep target clicked')"
+    >Deep locate target</button>
+
+    <h3>Test 6: Blue overlay click-through check</h3>
+
+    <p>
+      Locate this button, then click it while the blue
+      overlay is visible. GhostTrace's overlay must not
+      block your click or press the button for you.
+    </p>
+
+    <button
+      class="click-check"
+      onclick="this.textContent = 'Clicked while located'; return false;"
+    >Click-through check button</button>
   </div>
+
+  <style>
+    .scroll-spacer {
+      height: 2000px;
+    }
+
+    .deep-target {
+      margin-bottom: 10px;
+    }
+
+    .click-check {
+      display: block;
+    }
+  </style>
 </body>
 </html>

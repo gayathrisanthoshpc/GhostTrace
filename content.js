@@ -325,9 +325,6 @@
   // ------------------------------
 
   function scanPage() {
-    // A new scan replaces all findings, so the
-    // previous elementId mapping is no longer valid.
-    elementRegistry.clear();
     const elements = [
       ...document.querySelectorAll(selector)
     ];
@@ -336,8 +333,13 @@
     const visibleTargets = [];
 
     for (const el of elements) {
-      // Ignore elements created by GhostTrace.
-      if (el.closest(`#${HIGHLIGHT_LAYER_ID}`)) {
+      // Ignore elements created by GhostTrace: the red
+      // highlight layer and the blue locate overlay.
+      if (
+        el.closest(
+          `#${HIGHLIGHT_LAYER_ID}, #${LOCATE_LAYER_ID}`
+        )
+      ) {
         continue;
       }
 
@@ -465,9 +467,10 @@
   // HIGHLIGHTS
   // ------------------------------
 
-  // Remove the previous GhostTrace highlight layer.
-  function clearHighlights() {
-    // Also remove any temporary locate overlay.
+  // Remove the red highlight layer and the blue locate
+  // overlay from the page. This is visual cleanup only:
+  // it does not touch the element registry.
+  function removeHighlightVisuals() {
     removeLocateOverlay();
 
     const existingLayer =
@@ -480,9 +483,20 @@
     }
   }
 
+  // Remove all visuals AND invalidate every elementId.
+  // After this, old Locate Element requests fail gracefully
+  // until the user scans again.
+  function clearHighlights() {
+    removeHighlightVisuals();
+
+    elementRegistry.clear();
+  }
+
   // Draw visible highlight boxes and risk labels.
+  // Visual cleanup only: by the time this runs, the
+  // caller has already reset the element registry.
   function highlightFindings(findings) {
-    clearHighlights();
+    removeHighlightVisuals();
 
     if (findings.length === 0) {
       return;
@@ -742,6 +756,11 @@
   chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
       if (message.action === "SCAN_PAGE") {
+        // A new scan invalidates every previous elementId
+        // BEFORE fresh findings are registered, so stale
+        // IDs can never point at old DOM elements.
+        elementRegistry.clear();
+
         const findings = scanPage();
 
         highlightFindings(findings);
@@ -787,9 +806,9 @@
       }
 
       if (message.action === "LOCATE_ELEMENT") {
-        sendResponse(
-          locateElement(message.elementId)
-        );
+        const located = locateElement(message.elementId);
+
+        sendResponse(located);
       }
 
       if (message.action === "CLEAR_HIGHLIGHTS") {
