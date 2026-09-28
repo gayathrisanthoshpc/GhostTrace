@@ -10,6 +10,9 @@
   const HIGHLIGHT_LAYER_ID =
     "__ghosttrace_highlight_layer";
 
+  const LOCATE_LAYER_ID =
+    "__ghosttrace_locate_layer";
+
   // Elements that users can potentially interact with.
   const selector = [
     "a",
@@ -294,10 +297,37 @@
   }
 
   // ------------------------------
+  // ELEMENT ID REGISTRY
+  // ------------------------------
+
+  // Maps elementId -> actual DOM element.
+  // The mapping stays private to this content script:
+  // only the string elementId is ever sent to the popup,
+  // so page DOM nodes are never exposed through messages.
+  const elementRegistry = new Map();
+
+  let elementIdCounter = 0;
+
+  // Assign a fresh, unique elementId to a finding's element.
+  function registerElement(el) {
+    elementIdCounter += 1;
+
+    const elementId =
+      `ghosttrace-element-${elementIdCounter}`;
+
+    elementRegistry.set(elementId, el);
+
+    return elementId;
+  }
+
+  // ------------------------------
   // SCAN PAGE
   // ------------------------------
 
   function scanPage() {
+    // A new scan replaces all findings, so the
+    // previous elementId mapping is no longer valid.
+    elementRegistry.clear();
     const elements = [
       ...document.querySelectorAll(selector)
     ];
@@ -380,6 +410,7 @@
 
         findings.push({
           element: el,
+          elementId: registerElement(el),
           description,
           ...details,
           reasons,
@@ -436,6 +467,9 @@
 
   // Remove the previous GhostTrace highlight layer.
   function clearHighlights() {
+    // Also remove any temporary locate overlay.
+    removeLocateOverlay();
+
     const existingLayer =
       document.getElementById(
         HIGHLIGHT_LAYER_ID
@@ -535,6 +569,172 @@
   }
 
   // ------------------------------
+  // LOCATE ELEMENT
+  // ------------------------------
+
+  let locateAlignTimer = null;
+  let locateCleanupTimer = null;
+
+  // Remove the temporary locate overlay and its timers.
+  function removeLocateOverlay() {
+    if (locateAlignTimer) {
+      clearInterval(locateAlignTimer);
+      locateAlignTimer = null;
+    }
+
+    if (locateCleanupTimer) {
+      clearTimeout(locateCleanupTimer);
+      locateCleanupTimer = null;
+    }
+
+    document
+      .getElementById(LOCATE_LAYER_ID)
+      ?.remove();
+  }
+
+  // Draw a short-lived overlay around the element.
+  // GhostTrace never changes the styles of the page's
+  // own elements: the overlay is a separate layer that
+  // removes itself after a short time.
+  function showLocateOverlay(el) {
+    removeLocateOverlay();
+
+    const layer = document.createElement("div");
+
+    layer.id = LOCATE_LAYER_ID;
+
+    Object.assign(layer.style, {
+      position: "fixed",
+      inset: "0",
+      width: "100%",
+      height: "100%",
+      zIndex: "2147483647",
+      pointerEvents: "none",
+      overflow: "hidden"
+    });
+
+    // Create the blue locate box.
+    const box = document.createElement("div");
+
+    Object.assign(box.style, {
+      position: "fixed",
+      boxSizing: "border-box",
+      border: "3px solid #2563eb",
+      background: "rgba(37, 99, 235, 0.15)",
+      borderRadius: "3px",
+      pointerEvents: "none"
+    });
+
+    // Create the locate label.
+    const label = document.createElement("div");
+
+    label.textContent = "GhostTrace: Element located";
+
+    Object.assign(label.style, {
+      position: "fixed",
+      maxWidth: "280px",
+      padding: "5px 9px",
+      background: "#2563eb",
+      color: "#ffffff",
+      font: "bold 12px Arial, sans-serif",
+      lineHeight: "16px",
+      borderRadius: "4px",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+      whiteSpace: "normal",
+      overflowWrap: "anywhere",
+      pointerEvents: "none"
+    });
+
+    box.appendChild(label);
+    layer.appendChild(box);
+
+    document.documentElement.appendChild(layer);
+
+    // Keep the overlay aligned while a smooth scroll
+    // settles, then let it track the element briefly.
+    const alignOverlay = () => {
+      if (!el.isConnected) {
+        removeLocateOverlay();
+        return;
+      }
+
+      const rect = el.getBoundingClientRect();
+
+      if (
+        rect.width === 0 ||
+        rect.height === 0
+      ) {
+        return;
+      }
+
+      Object.assign(box.style, {
+        left: `${rect.left}px`,
+        top: `${rect.top}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`
+      });
+
+      Object.assign(label.style, {
+        left: `${Math.max(0, rect.left)}px`,
+        top: `${Math.max(0, rect.top - 30)}px`
+      });
+    };
+
+    alignOverlay();
+
+    locateAlignTimer = setInterval(
+      alignOverlay,
+      100
+    );
+
+    // The overlay removes itself after a short time.
+    locateCleanupTimer = setTimeout(
+      removeLocateOverlay,
+      2500
+    );
+  }
+
+  // Find the element for an elementId, scroll it into
+  // view, and flash a temporary highlight around it.
+  function locateElement(elementId) {
+    // The registry lives only inside this content script.
+    const el = typeof elementId === "string"
+      ? elementRegistry.get(elementId)
+      : null;
+
+    if (!el) {
+      return {
+        success: false,
+        reason: "not_found"
+      };
+    }
+
+    // The element may have been removed since the scan.
+    if (!el.isConnected) {
+      elementRegistry.delete(elementId);
+
+      return {
+        success: false,
+        reason: "stale"
+      };
+    }
+
+    // Bring the exact element into view. This changes
+    // the scroll position only, never element styles.
+    el.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest"
+    });
+
+    showLocateOverlay(el);
+
+    return {
+      success: true
+    };
+  }
+
+  // ------------------------------
   // MESSAGE LISTENER
   // ------------------------------
 
@@ -552,6 +752,7 @@
 
           findings: findings.map(
             ({
+              elementId,
               description,
               elementType,
               elementLabel,
@@ -563,6 +764,7 @@
               explanation,
               recommendation
             }) => ({
+              elementId,
               description,
               elementType,
               elementLabel,
@@ -582,6 +784,12 @@
             })
           )
         });
+      }
+
+      if (message.action === "LOCATE_ELEMENT") {
+        sendResponse(
+          locateElement(message.elementId)
+        );
       }
 
       if (message.action === "CLEAR_HIGHLIGHTS") {

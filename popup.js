@@ -509,6 +509,93 @@ function createElementDetailsSection(finding) {
 }
 
 // ------------------------------
+// LOCATE ELEMENT
+// ------------------------------
+
+// Build the Locate Element action for one finding card.
+function createLocateAction(finding) {
+  const container = document.createElement("div");
+
+  Object.assign(container.style, {
+    marginTop: "10px"
+  });
+
+  const locateButton = document.createElement("button");
+
+  locateButton.type = "button";
+  locateButton.textContent = "Locate Element";
+
+  Object.assign(locateButton.style, {
+    padding: "8px 12px",
+    background: "#2563eb",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "600"
+  });
+
+  const locateStatus = document.createElement("p");
+
+  Object.assign(locateStatus.style, {
+    margin: "8px 0 0",
+    fontSize: "12px",
+    lineHeight: "1.5",
+    color: "#64748b"
+  });
+
+  locateButton.addEventListener("click", async () => {
+    locateButton.disabled = true;
+    locateStatus.textContent = "Locating element…";
+    locateStatus.style.color = "#64748b";
+
+    try {
+      const tab = await getCurrentTab();
+
+      if (!tab?.id) {
+        throw new Error("No active tab.");
+      }
+
+      const response = await chrome.tabs.sendMessage(
+        tab.id,
+        {
+          action: "LOCATE_ELEMENT",
+          elementId: finding.elementId
+        }
+      );
+
+      if (response?.success) {
+        locateStatus.textContent =
+          "Element located on the page.";
+
+        locateStatus.style.color = "#15803d";
+      } else {
+        // The element was removed from the page, or the
+        // mapping no longer contains it. A rescan fixes both.
+        locateStatus.textContent =
+          "This element is no longer on the page. Scan again to update findings.";
+
+        locateStatus.style.color = "#b45309";
+      }
+    } catch {
+      // Messaging failed, e.g. the page was reloaded and
+      // the content script is no longer there.
+      locateStatus.textContent =
+        "Could not reach this page. Reload it, then scan again.";
+
+      locateStatus.style.color = "#b91c1c";
+    } finally {
+      locateButton.disabled = false;
+    }
+  });
+
+  container.append(locateButton, locateStatus);
+
+  return container;
+}
+
+// ------------------------------
 // FINDING CARD
 // ------------------------------
 
@@ -623,6 +710,12 @@ function createFindingCard(finding, index) {
     explanationSection,
     recommendationSection
   );
+
+  // Locate Element action (only when the finding
+  // carries an elementId from the content script).
+  if (finding.elementId) {
+    card.append(createLocateAction(finding));
+  }
 
   return card;
 }
